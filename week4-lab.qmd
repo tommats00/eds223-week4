@@ -1,0 +1,212 @@
+---
+title: "Week 4 Lab"
+author: "Tom Gibbens-Matsuyama"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(terra) # raster
+library(tidyverse) 
+library(tmap)
+library(kableExtra)
+library(spData)
+library(spDataLarge)
+library(geodata)
+```
+
+# Load in raster data
+```{r}
+zion_elevation <- rast(system.file("raster/srtm.tif", package = "spDataLarge"))
+
+zion_land <- rast(system.file("raster/nlcd.tif", package = "spDataLarge"))
+```
+
+# Create a map 
+
+```{r}
+tm_shape(zion_elevation) +
+  tm_raster(title = "Elevation (m)")
+
+tm_shape(zion_land) +
+  tm_raster(title = "Land cover")
+```
+
+### Multi layer raster loading in data
+
+```{r}
+landsat <- rast(system.file("raster/landsat.tif", package = "spDataLarge"))
+```
+
+```{r}
+tm_shape(landsat) +
+  tm_raster()
+```
+
+#### Subset multi layer data 
+
+```{r}
+landsat3 <- subset(landsat, "landsat_3") # could use , 3 as well, basically indexes landsat[3]
+```
+
+```{r}
+global(zion_elevation, mean)
+freq(zion_land)
+```
+
+## Indexing 
+
+```{r}
+zion_elevation[1, 1] <- 0  # Update the value in this row, column
+zion_elevation[1]
+
+landsat[1] <- 0 # Updating the value in a multi layer
+landsat[1] 
+
+test_raster <- zion_elevation
+test_raster[test_raster < 20] <- NA
+```
+
+## Spatial subsetting
+
+```{r}
+point <- matrix(c(-113, 37.5), ncol = 2)
+
+terra::extract(zion_elevation, point)
+```
+
+```{r}
+clip <- rast(xmin = -113.3, xmax = -113, ymin = 37.2, ymax = 37.9,
+             resolution = 0.3,
+             vals = 1)
+
+zion_elevation_clip <- zion_elevation[clip, drop = FALSE]
+```
+
+```{r}
+tm_shape(zion_elevation) +
+  tm_raster() 
+
+tm_shape(zion_elevation_clip) +
+  tm_raster()
+```
+
+```{r}
+rmask <- zion_elevation
+
+rmask[rmask < 2000] <- NA # replace all vales less than 2000 with NA
+
+# bracket subsetting
+masked1 <- zion_elevation[rmask, drop = FALSE]
+
+masked2 <- terra::mask(zion_elevation, rmask)
+```
+
+```{r}
+tm_shape(masked1) +
+  tm_raster()
+```
+
+```{r}
+rcl <- matrix(c(1000, 1500, 1,
+                1500, 2000, 2,
+                2000, 2500, 3,
+                2500, 3000, 4),
+              ncol = 3, byrow = TRUE) 
+
+reclassified <- terra::classify(zion_elevation, rcl = rcl)
+values(reclassified) <- as.factor(values(reclassified))
+
+tm_shape(reclassified) +
+  tm_raster()
+```
+
+```{r}
+ndvi_fun <- function(nir, red){
+  (nir - red) / (nir + red)
+}
+
+ndvi_rast <- lapp(landsat[[c(4,3)]], fun = ndvi_fun) # nir is 4, red is 3 
+
+tm_shape(ndvi_rast) +
+  tm_raster()
+```
+
+```{r}
+elevation_focal <- focal(zion_elevation,
+      w = matrix(1, nrow = 9, ncol = 9),
+      fun = min)
+```
+
+```{r}
+tm_shape(elevation_focal) +
+  tm_raster()
+```
+
+```{r}
+terra::zonal(zion_elevation, reclassified, fun = mean)
+```
+
+```{r}
+terra::global(zion_elevation, mean)
+```
+
+### Changing the extent
+
+```{r}
+extend <- terra::extend(zion_elevation, c(1, 200))
+
+zion_elevation + extend # doesn't know how to add b/c # of grid cells is not the same
+```
+
+```{r}
+extend2 <- terra::extend(zion_elevation, extend)
+
+extend + extend2 # Now they are the same dimensions so we can add
+```
+
+### Origin
+
+```{r}
+origin(zion_elevation) 
+```
+
+### Changing resolution 
+
+```{r}
+# Using aggregate, getting coarser resolution
+zion_elevation_coarse <- terra::aggregate(zion_elevation,
+                                          fact = 5,
+                                          fun = mean)
+```
+
+```{r}
+# Using disaggregate, getting finer resolution
+# If aggregating, then disaggregating, doesn't go back to original data
+
+zion_elevation_disagg <- terra::disagg(zion_elevation_coarse,
+                                       fact = 5,
+                                       method = "bilinear")
+
+if(identical(zion_elevation, zion_elevation_disagg)) {
+  print("match")
+} else {
+  warning("don't match")
+}
+```
+
+### Resampling
+
+```{r}
+# Make our own raster data 
+
+target_rast <- rast(xmin = -113.2, xmax = -112.9,
+                    ymin = 37.4, ymax = 37.5,
+                    nrow = 450, ncol = 460,           # nrow and ncol defines resolution 
+                    crs = crs(zion_elevation))
+
+elevation_resample <- terra::resample(zion_elevation, y = target_rast, method = "bilinear")
+```
+
