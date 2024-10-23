@@ -1,0 +1,80 @@
+---
+title: "Week 4 Discussion"
+author: "Tom Gibbens-Matsuyama"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Load libraries
+
+```{r}
+library(tidyverse)
+library(spData)
+library(spDataLarge)
+library(sf)
+library(stars)
+library(terra)
+```
+
+# Load data
+```{r}
+dem <- terra::rast(system.file("raster/dem.tif", package = "spDataLarge"))
+landsat <- terra::rast(system.file("raster/landsat.tif", package = "spDataLarge"))
+srtm <- terra::rast(system.file("raster/srtm.tif", package = "spDataLarge"))
+peru <- stars::read_stars(here::here("data", "week4-discussion", "PER_elv.tif"))
+peru <- rast(peru)
+```
+
+## 2. Your Task
+
+```{r}
+# 1. Plot a histogram and boxplot of dem
+hist(dem)
+
+boxplot(dem)
+```
+
+```{r}
+# 2. Reclassify dem and compute the mean for the three classes:
+rcl <- matrix(c(-Inf, 300, 0,
+                300, 500, 1,
+                500, Inf, 2),
+              ncol = 3,
+              byrow = TRUE)
+
+dem_rcl <- classify(dem, rcl = rcl)
+
+
+# assign labels to the numerical categories
+levels(dem_rcl) <- tibble::tibble(id = 0:2, 
+                                  cats = c("low", "medium", "high"))
+
+# calculate mean elevation for each category using original DEM values
+elevation_mean <- terra::zonal(dem, dem_rcl, fun = "mean")
+elevation_mean
+```
+
+```{r}
+ndwi_fun <- function(green, nir){
+    (green - nir)/(green + nir)
+}
+
+ndvi_fun <- function(nir, red){
+  (nir - red)/(nir + red)
+}
+```
+
+```{r}
+ndvi_rast <- lapp(landsat[[c(4, 3)]], fun = ndvi_fun)
+
+ndwi_rast <- lapp(landsat[[c(2, 4)]], fun = ndwi_fun)
+```
+
+```{r}
+plot(ndvi_rast)
+
+plot(ndwi_rast)
+```
+
